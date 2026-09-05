@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
-import { VerificationWizard } from "@/components/verification/verification-wizard";
+import { VerificationWizard } from "@/components/camera/verification-wizard";
 import { getSessionUser } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Баталгаажуулалт" };

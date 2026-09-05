@@ -559,6 +559,10 @@ create table if not exists public.moderator_applications (
 
 alter table public.moderator_applications enable row level security;
 
+-- Liveness anti-spoof шалгалтын бүрэн мэдээлэл (blink, sizeVariance, color, confidence г.м.)
+-- Хүснэгт аль хэдийн байгаа бөгөөд энэ баганагүй бол нэмнэ (idempotent)
+alter table public.moderator_applications add column if not exists face_result jsonb;
+
 -- updated_at автоматаар шинэчлэх
 create or replace function public.touch_moderator_applications()
 returns trigger language plpgsql

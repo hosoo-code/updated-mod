@@ -91,6 +91,8 @@ export function ApplyWizard({
   const [frontUrls, setFrontUrls] = useState<string[]>(initial.idCardFrontUrls);
   const [backUrls, setBackUrls] = useState<string[]>(initial.idCardBackUrls);
   const [selfieUrl, setSelfieUrl] = useState<string | null>(initial.selfieFaceUrl);
+  // Селфи liveness anti-spoof үр дүн — анкет илгээхэд server руу очно
+  const [selfieResult, setSelfieResult] = useState<FaceCheckResult | null>(null);
   const [cameraOpen, setCameraOpen] = useState<{ kind: "document" | "selfie"; slot?: ImgSlot } | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -179,6 +181,8 @@ export function ApplyWizard({
     try {
       const key = await uploadApplicationImage(result.blob, applicationId, SELFIE_SLOT);
       setSlot(SELFIE_SLOT, key);
+      // Liveness үр дүнг хадгална — анкет илгээхэд admin хяналтад очно
+      setSelfieResult(result.faceResult);
       toast.success("Селфи амжилттай авагдлаа.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Селфи авахад алдаа гарлаа.");
@@ -251,6 +255,7 @@ export function ApplyWizard({
           idCardFrontUrls: frontUrls.filter(Boolean),
           idCardBackUrls: backUrls.filter(Boolean),
           selfieFaceUrl: selfieUrl,
+          faceResult: selfieResult,
           father,
           mother,
           bankAccounts: banks.map((b) => ({ bankName: b.bankName.trim(), accountNumber: b.accountNumber.trim() })),

@@ -61,7 +61,13 @@ export const documentRegisterSchema = z.object({
         singleFace: z.boolean(),
         lightingOk: z.boolean(),
         centered: z.boolean(),
-        stepsCompleted: z.number().int().min(0).max(4),
+        stepsCompleted: z.number().min(0),
+        steps: z.array(z.boolean()).max(6),
+        blinkDetected: z.boolean(),
+        sizeVariance: z.number().min(0),
+        colorConsistent: z.boolean(),
+        totalElapsedMs: z.number().min(0),
+        confidence: z.number().min(0).max(1),
       }),
       note: z.string().max(300).nullable(),
     })
@@ -240,6 +246,27 @@ export const applyWizardSubmitSchema = z.object({
   mother: parentSchema,
   bankAccounts: z.array(bankSchema).min(1, "Хамгийн багадаа 1 данс заавал"),
   address: addressFromSubmitSchema,
+  /** Селфи-ээс цуглуулсан liveness anti-spoof мэдээлэл — admin хяналтад ашиглана */
+  faceResult: z
+    .object({
+      passed: z.boolean(),
+      livenessPassed: z.boolean(),
+      checks: z.object({
+        faceDetected: z.boolean(),
+        singleFace: z.boolean(),
+        lightingOk: z.boolean(),
+        centered: z.boolean(),
+        stepsCompleted: z.number().min(0),
+        steps: z.array(z.boolean()).max(6),
+        blinkDetected: z.boolean(),
+        sizeVariance: z.number().min(0),
+        colorConsistent: z.boolean(),
+        totalElapsedMs: z.number().min(0),
+        confidence: z.number().min(0).max(1),
+      }),
+      note: z.string().max(300).nullable(),
+    })
+    .optional(),
 });
 
 export const setApplicationStatusSchema = z.object({

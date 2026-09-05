@@ -8,6 +8,7 @@ export type CameraStatus =
   | "active"
   | "denied"
   | "unavailable"
+  | "inuse"
   | "error";
 
 /**
@@ -33,40 +34,60 @@ export function useCamera(facingMode: "environment" | "user" = "environment") {
     setStatus("idle");
   }, []);
 
+  const genRef = useRef(0);
+
   const start = useCallback(async () => {
+    const gen = ++genRef.current;
     stop();
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setStatus("unavailable");
       return;
     }
     setStatus("requesting");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => undefined);
-      }
-      setStatus("active");
-    } catch (e) {
-      const err = e as DOMException | null;
-      if (err?.name === "NotAllowedError" || err?.name === "SecurityError") {
-        setStatus("denied");
-      } else if (
-        err?.name === "NotFoundError" ||
-        err?.name === "OverconstrainedError" ||
-        err?.name === "NotReadableError"
-      ) {
-        setStatus("unavailable");
-      } else {
-        setStatus("error");
+    const constraints = {
+      video: {
+        facingMode,
+        width: { ideal: 1280, max: 1280 },
+        height: { ideal: 720, max: 720 },
+      } as MediaTrackConstraints,
+      audio: false,
+    };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        // Хуучин зөвшөөрөл хэвээр байвал stream-ийг заавал зогсооно
+        if (gen !== genRef.current) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => undefined);
+        }
+        setStatus("active");
+        return;
+      } catch (e) {
+        if (gen !== genRef.current) return; // дараагийн start() энэ амлалтыг хүчингүй болгосон
+        const err = e as DOMException | null;
+        const name = err?.name;
+        // Эхний оролдлого зөвшөөрөгдөөгүй бол (низкийн резолюц эсвэл хязгаарлалт) —
+        // хязгааргүй (ideal-гүй) оролдоод үзнэ
+        if (attempt === 0 && (name === "OverconstrainedError" || name === "NotReadableError")) {
+          constraints.video = { facingMode };
+          continue;
+        }
+        if (name === "NotAllowedError" || name === "SecurityError") {
+          setStatus("denied");
+        } else if (name === "NotReadableError") {
+          // Камерыг өөр апп ашиглаж байна — ялгаатай мессеж
+          setStatus("inuse");
+        } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+          setStatus("unavailable");
+        } else {
+          setStatus("error");
+        }
+        return;
       }
     }
   }, [facingMode, stop]);
@@ -89,7 +110,9 @@ export function cameraErrorMessage(status: CameraStatus): string | null {
     case "denied":
       return "Камерын зөвшөөрөл татгалзсан байна. Тохиргооноос камерын зөвшөөрлийг өгөөд дахин оролдоно уу.";
     case "unavailable":
-      return "Камер олдсонгүй эсвэл өөр аппликейшн ашиглаж байна. Камераа шалгаад дахин оролдоно уу.";
+      return "Камер олдсонгүй эсвэл ашиглах боломжгүй байна. Камераа шалгаад дахин оролдоно уу.";
+    case "inuse":
+      return "Камерыг өөр аппликейшн ашиглаж байна. Бусад аппликейшний камерын ашиглалтыг хаагаад дахин оролдоно уу.";
     case "error":
       return "Камер ачаалахад алдаа гарлаа. Дахин оролдоно уу.";
     default:

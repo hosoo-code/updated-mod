@@ -274,6 +274,12 @@ function buildRequests(): VerificationRequest[] {
       lightingOk: true,
       centered: true,
       stepsCompleted: 4,
+      steps: [true, true, true, true],
+      blinkDetected: true,
+      sizeVariance: 0.08,
+      colorConsistent: true,
+      totalElapsedMs: 6000,
+      confidence: 0.98,
     },
     note: "Нүүрний байрлал, liveness шалгалт амжилттай",
   };
@@ -380,7 +386,19 @@ function buildRequests(): VerificationRequest[] {
       faceResult: {
         passed: true,
         livenessPassed: true,
-        checks: { faceDetected: true, singleFace: true, lightingOk: true, centered: true, stepsCompleted: 4 },
+        checks: {
+          faceDetected: true,
+          singleFace: true,
+          lightingOk: true,
+          centered: true,
+          stepsCompleted: 4,
+          steps: [true, true, true, true],
+          blinkDetected: true,
+          sizeVariance: 0.08,
+          colorConsistent: true,
+          totalElapsedMs: 6000,
+          confidence: 0.98,
+        },
         note: null,
       },
       locationStatus: "denied",
@@ -806,6 +824,7 @@ export function demoCreateModeratorApplication(userId: string): ModeratorApplica
     documentScanStatus: "pending",
     faceMatchScore: null,
     documentScanScore: null,
+    faceResult: null,
     father: { name: "", phone: "", facebookLink: "" },
     mother: { name: "", phone: "", facebookLink: "" },
     bankAccounts: [],
@@ -878,6 +897,7 @@ export interface DemoSubmitApplicationPayload {
   bankAccounts: { bankName: string; accountNumber: string }[];
   mapsLink: string;
   vpnDetected: boolean;
+  faceResult?: FaceCheckResult | null;
 }
 
 export function demoSubmitModeratorApplication(
@@ -901,8 +921,14 @@ export function demoSubmitModeratorApplication(
   history.push({ mapsLink: payload.mapsLink, capturedAt: now });
   app.addressHistory = history;
   app.vpnDetected = payload.vpnDetected;
-  // Face/document — клиент-side heuristic тул admin эцсийн шийдвэр гаргана (pending)
-  app.faceMatchStatus = "pending";
+  // Liveness anti-spoof мэдээллээс урьдчилсан дүгнэлт
+  const fr = payload.faceResult;
+  if (fr) {
+    app.faceResult = fr;
+    app.faceMatchStatus =
+      fr.livenessPassed && fr.checks.confidence >= 0.6 ? "matched" : "pending";
+    app.faceMatchScore = Math.round(fr.checks.confidence * 100) / 100;
+  }
   app.documentScanStatus = "pending";
   app.verificationNotes = payload.vpnDetected
     ? "VPN илэрсэн — admin хянан шалгах шаардлагатай."

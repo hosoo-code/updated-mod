@@ -181,13 +181,30 @@ export function ReviewClient({
                   <p className="mt-1.5 flex items-center justify-between">
                     <span className="text-zinc-500 dark:text-zinc-400">Алхамууд</span>
                     <span className="font-medium text-zinc-700 dark:text-zinc-200">
-                      {request.faceResult.checks.stepsCompleted}/4
+                      {request.faceResult.checks.stepsCompleted}/
+                      {request.faceResult.checks.steps.length || 4}
                     </span>
                   </p>
                   <p className="mt-1.5 flex items-center justify-between">
+                    <span className="text-zinc-500 dark:text-zinc-400">Нүд анивчсан</span>
+                    <ViC ok={request.faceResult.checks.blinkDetected} />
+                  </p>
+                  <p className="mt-1.5 flex items-center justify-between">
+                    <span className="text-zinc-500 dark:text-zinc-400">Толгой хөдөлгөөн</span>
+                    <ViC ok={request.faceResult.checks.sizeVariance >= 0.02} />
+                  </p>
+                  <p className="mt-1.5 flex items-center justify-between">
+                    <span className="text-zinc-500 dark:text-zinc-400">Өнгө тогтвортой</span>
+                    <ViC ok={request.faceResult.checks.colorConsistent} />
+                  </p>
+                  <p className="mt-1.5 flex items-center justify-between">
                     <span className="text-zinc-500 dark:text-zinc-400">Гэрэлтүүлэг</span>
+                    <ViC ok={request.faceResult.checks.lightingOk} text={request.faceResult.checks.lightingOk ? "OK" : "Бага"} />
+                  </p>
+                  <p className="mt-1.5 flex items-center justify-between">
+                    <span className="text-zinc-500 dark:text-zinc-400">Итгэх түвшин</span>
                     <span className="font-medium text-zinc-700 dark:text-zinc-200">
-                      {request.faceResult.checks.lightingOk ? "OK" : "Бага"}
+                      {Math.round(request.faceResult.checks.confidence * 100)}%
                     </span>
                   </p>
                   {request.faceResult.note ? (
@@ -374,5 +391,17 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <span className="text-zinc-400">{label}</span>
       <span className="text-right font-medium text-zinc-800 dark:text-zinc-200">{value}</span>
     </div>
+  );
+}
+
+/** Liveness evidence pass/fail indicator (● = ok, ○ = failed) */
+function ViC({ ok, text }: { ok: boolean; text?: string }) {
+  return (
+    <span className="flex items-center gap-1.5 font-medium">
+      <span className={ok ? "text-emerald-500" : "text-red-500"} aria-hidden>
+        {ok ? "●" : "○"}
+      </span>
+      <span className="text-zinc-700 dark:text-zinc-200">{text ?? (ok ? "Тийм" : "Үгүй")}</span>
+    </span>
   );
 }

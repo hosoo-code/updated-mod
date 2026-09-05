@@ -27,6 +27,7 @@ export const POST = withApi(async (req) => {
     bankAccounts: d.bankAccounts,
     mapsLink: d.address.mapsLink,
     vpnDetected: d.address.vpnCheck.detected,
+    faceResult: d.faceResult,
   });
   if (!app) return err("Анкет олдсонгүй эсвэл илгээх боломжгүй байна.", 400);
 

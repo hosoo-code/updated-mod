@@ -126,6 +126,76 @@ export function ApplicationReview({
           <BadgeL label="Нүүр score" value={current.faceMatchScore != null ? `${current.faceMatchScore}/100` : "—"} />
           <BadgeL label="Баримт score" value={current.documentScanScore != null ? `${current.documentScanScore}/100` : "—"} />
         </div>
+
+        {/* Liveness anti-spoof example — селфи фото/spoof эсэхийг admin шалгах нотолгоо */}
+        {current.faceResult ? (
+          <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                Амьд нүүр (liveness) нотолгоо
+              </span>
+              <span
+                className={
+                  current.faceResult.livenessPassed
+                    ? "font-semibold text-emerald-600 dark:text-emerald-400"
+                    : "font-semibold text-red-500 dark:text-red-400"
+                }
+              >
+                {current.faceResult.livenessPassed ? "Амьд ✓" : "Амьд ✗"}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+              <EvidenceChip
+                label="Итгэх түвшин"
+                ok={current.faceResult.checks.confidence >= 0.6}
+                value={`${Math.round(current.faceResult.checks.confidence * 100)}%`}
+              />
+              <EvidenceChip
+                label="Нүүр илэрсэн"
+                ok={current.faceResult.checks.faceDetected}
+                value={current.faceResult.checks.faceDetected ? "Тийм" : "Үгүй"}
+              />
+              <EvidenceChip
+                label="Нүд анивчсан"
+                ok={current.faceResult.checks.blinkDetected}
+                value={current.faceResult.checks.blinkDetected ? "Тийм" : "Үгүй"}
+              />
+              <EvidenceChip
+                label="Толгой хөдөлгөөн"
+                ok={current.faceResult.checks.sizeVariance >= 0.02}
+                value={`${(current.faceResult.checks.sizeVariance * 100).toFixed(0)}%`}
+              />
+              <EvidenceChip
+                label="Өнгө тогтвортой"
+                ok={current.faceResult.checks.colorConsistent}
+                value={current.faceResult.checks.colorConsistent ? "Тийм" : "Үгүй"}
+              />
+              <EvidenceChip
+                label="Алхам бүтсэн"
+                ok={
+                  current.faceResult.checks.stepsCompleted >=
+                  (current.faceResult.checks.steps.length || 4)
+                }
+                value={`${current.faceResult.checks.stepsCompleted} алхам`}
+              />
+              <EvidenceChip
+                label="Гэрэл"
+                ok={current.faceResult.checks.lightingOk}
+                value={current.faceResult.checks.lightingOk ? "ОК" : "Буруу"}
+              />
+              <EvidenceChip
+                label="Хугацаа"
+                ok={current.faceResult.checks.totalElapsedMs >= 1500}
+                value={`${(current.faceResult.checks.totalElapsedMs / 1000).toFixed(1)}с`}
+              />
+            </div>
+            {current.faceResult.note ? (
+              <p className="mt-2 italic text-zinc-500 dark:text-zinc-400">
+                {current.faceResult.note}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </Section>
 
       {/* Эцэг эх */}
@@ -271,6 +341,23 @@ function BadgeL({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-zinc-200 px-3 py-2 dark:border-white/10">
       <p className="text-[11px] text-zinc-400">{label}</p>
       <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{value}</p>
+    </div>
+  );
+}
+
+function EvidenceChip({ label, ok, value }: { label: string; ok: boolean; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded bg-white/60 px-2 py-1 dark:bg-zinc-950/40">
+      <span className="text-zinc-500 dark:text-zinc-400">{label}</span>
+      <span className="flex items-center gap-1.5 font-medium">
+        <span
+          className={ok ? "text-emerald-500" : "text-red-500"}
+          aria-hidden
+        >
+          {ok ? "●" : "○"}
+        </span>
+        <span className="text-zinc-800 dark:text-zinc-200">{value}</span>
+      </span>
     </div>
   );
 }

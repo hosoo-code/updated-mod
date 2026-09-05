@@ -64,7 +64,19 @@ function toPublic(m: Moderator): PublicModerator {
 const FACE_OK: FaceCheckResult = {
   passed: true,
   livenessPassed: true,
-  checks: { faceDetected: true, singleFace: true, lightingOk: true, centered: true, stepsCompleted: 4 },
+  checks: {
+    faceDetected: true,
+    singleFace: true,
+    lightingOk: true,
+    centered: true,
+    stepsCompleted: 4,
+    steps: [true, true, true, true],
+    blinkDetected: true,
+    sizeVariance: 0.08,
+    colorConsistent: true,
+    totalElapsedMs: 6000,
+    confidence: 0.98,
+  },
   note: null,
 };
 
@@ -1310,6 +1322,7 @@ function mapModeratorApplication(row: Row): ModeratorApplicationData {
     documentScanStatus: (str(row.id_document_scan_status) as ModeratorApplicationData["documentScanStatus"]) ?? "pending",
     faceMatchScore: typeof row.face_match_score === "number" ? row.face_match_score : null,
     documentScanScore: typeof row.document_scan_score === "number" ? row.document_scan_score : null,
+    faceResult: (row.face_result as FaceCheckResult | null) ?? null,
     father: {
       name: str(row.father_name) ?? "",
       phone: str(row.father_phone) ?? "",
@@ -1446,10 +1459,24 @@ export async function submitModeratorApplication(
     bankAccounts: BankAccountInput[];
     mapsLink: string;
     vpnDetected: boolean;
+    faceResult?: FaceCheckResult | null;
   }
 ): Promise<ModeratorApplicationData | null> {
   if (isDemoMode()) return demoSubmitModeratorApplication(userId, payload);
   const sb = await createServiceClient();
+  // Liveness anti-spoof мэдээллээс admin-д нь урьдчилсан дүгнэлт гаргана
+  const fr = payload.faceResult;
+  const faceMatchStatus: "matched" | "failed" | "pending" = !fr
+    ? "pending"
+    : fr.livenessPassed && fr.checks.confidence >= 0.6
+      ? "matched"
+      : fr.checks.steps.filter(Boolean).length === 0
+        ? "failed"
+        : "pending";
+  const faceScore = fr ? Math.round(fr.checks.confidence * 100) / 100 : null;
+  const livenessNote = fr
+    ? `Liveness: ${fr.livenessPassed ? "давсан" : "даваагүй"}; blink=${fr.checks.blinkDetected}; sizeVar=${fr.checks.sizeVariance.toFixed(2)}; color=${fr.checks.colorConsistent ? "тогтвортой" : "тогтворгүй"}; time=${fr.checks.totalElapsedMs}ms; conf=${fr.checks.confidence.toFixed(2)}`
+    : null;
   const now = new Date().toISOString();
   const historyEntry = { mapsLink: payload.mapsLink, capturedAt: now };
   const allowed: ModeratorAppStatus[] = ["draft", "editable"];
@@ -1485,11 +1512,15 @@ export async function submitModeratorApplication(
       current_address_maps_link: payload.mapsLink,
       address_history: mergedHistory, // өмнөх түүх + шинэ бүртгэл
       vpn_detected: payload.vpnDetected,
-      face_match_status: "pending",
+      face_match_status: faceMatchStatus,
       id_document_scan_status: "pending",
-      verification_notes: payload.vpnDetected
-        ? "VPN илэрсэн — admin хянан шалгах шаардлагатай."
-        : null,
+      face_match_score: faceScore,
+      verification_notes: [
+        payload.vpnDetected ? "VPN илэрсэн — admin хянан шалгах шаардлагатай." : null,
+        livenessNote ? `Селфи шалгалт: ${livenessNote}` : null,
+      ]
+        .filter(Boolean)
+        .join(" | ") || null,
       status: "submitted",
       submitted_at: now,
     })
@@ -1498,7 +1529,22 @@ export async function submitModeratorApplication(
     .select("*")
     .single();
   if (error) throw new Error(error.message);
-  return data ? mapModeratorApplication(data) : null;
+  const app = mapModeratorApplication(data);
+  // Liveness бүрэн мэдээллийг face_result баганад хадгална — багана байхгүй бол
+  // үндсэн submit амжилтгүй болохгүйн тулд тусдаа, алдааг тохируулсан update хийнэ
+  if (fr && app) {
+    try {
+      await sb
+        .from("moderator_applications")
+        .update({ face_result: fr })
+        .eq("id", app.id)
+        .select("face_result")
+        .single();
+    } catch {
+      // Багана суулгаагүй байж болно — үндсэн бүртгэл аль хэдийн амжилттай
+    }
+  }
+  return app;
 }
 
 /** Admin: бүх анкетын жагсаалт (шилэн шинээр). */

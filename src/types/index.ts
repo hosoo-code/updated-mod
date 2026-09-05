@@ -161,6 +161,8 @@ export interface ModeratorApplicationData {
   documentScanStatus: DocumentScanStatus;
   faceMatchScore: number | null;
   documentScanScore: number | null;
+  /** Селфи-ээс цуглуулсан liveness anti-spoof мэдээлэл (blink, sizeVariance, color, confidence) */
+  faceResult: FaceCheckResult | null;
   father: ParentInfo;
   mother: ParentInfo;
   bankAccounts: BankAccountInput[];
@@ -241,7 +243,20 @@ export interface FaceCheckResult {
     singleFace: boolean;
     lightingOk: boolean;
     centered: boolean;
+    /** Амжилттай хийгдсэн алхмын тоо (арын нийцтэй) */
     stepsCompleted: number;
+    /** Алхам бүрийн амжилт (true = tolgoi ergelee хийсэн) — false-positive сааруулагч */
+    steps: boolean[];
+    /** Амьд нүд анивчсан эсэх (blink detection) — фото/spoof-ээс хамгаалах */
+    blinkDetected: boolean;
+    /** Нүүрний хэмжээний өөрчлөлт — 3D толгойн хөдөлгөөн илрүүлэх (variation coefficient) */
+    sizeVariance: number;
+    /** Холдсуудын хооронд нүүрний өнгө/гэрэл тогтвортой байсан эсэх */
+    colorConsistent: boolean;
+    /** Liveness-ийг хийсэн нийт хугацаа (ms) — огт хурдан дууссан бол сэжигтэй */
+    totalElapsedMs: number;
+    /** Anti-spoof нийт итгэх түвшин 0-1 */
+    confidence: number;
   };
   note: string | null;
 }
