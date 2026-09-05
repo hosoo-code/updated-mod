@@ -43,10 +43,10 @@ const STEPS: StepDef[] = [
   { key: "info", label: "Хувийн мэдээлэл" },
   { key: "phone", label: "Утас" },
   { key: "idcard", label: "Иргэний үнэмлэх" },
-  { key: "selfie", label: "Селфи" },
   { key: "parents", label: "Эцэг эх" },
   { key: "bank", label: "Банк" },
   { key: "address", label: "Хаяг" },
+  { key: "selfie", label: "Селфи" },
   { key: "review", label: "Хяналт" },
   { key: "done", label: "Дууссан" },
 ];
@@ -281,10 +281,10 @@ export function ApplyWizard({
     if (step === 0 && !infoOk) return toast.error("Нэр, Facebook линкээ оруулна уу.");
     if (step === 1 && !phonesOk) return toast.error("Утасны дугаараа зөв оруулна уу (дор хаяж нэг).");
     if (step === 2 && !idOk) return toast.error("6 үнэмлэхийн зургийг бүгдийг нь авах шаардлагатай.");
-    if (step === 3 && !selfieOk) return toast.error("Селфи авах шаардлагатай.");
-    if (step === 4 && !parentsOk) return toast.error("Эцэг, эхийн бүх мэдээллийг бөглөнө үү.");
-    if (step === 5 && !bankOk) return toast.error("Хамгийн багадаа 1 данс зөв оруулна уу.");
-    if (step === 6 && !addressOk) return toast.error("Хаягаа (байршлаа) авах шаардлагатай.");
+    if (step === 3 && !parentsOk) return toast.error("Эцэг, эхийн бүх мэдээллийг бөглөнө үү.");
+    if (step === 4 && !bankOk) return toast.error("Хамгийн багадаа 1 данс зөв оруулна уу.");
+    if (step === 5 && !addressOk) return toast.error("Хаягаа (байршлаа) авах шаардлагатай.");
+    if (step === 6 && !selfieOk) return toast.error("Селфи (нүүр) авах шаардлагатай.");
     if (step === 7) {
       submit();
       return;
@@ -397,40 +397,20 @@ export function ApplyWizard({
         </Card>
       ) : null}
 
-      {/* STEP 3 — Селфи */}
+      {/* STEP 3 — Эцэг эх */}
       {step === 3 ? (
-        <Card>
-          <CardContent className="space-y-4">
-            <StepHeader icon={<ScanFace className="h-5 w-5" />} title="Селфи (амьд нүүр)" subtitle="Liveness шалгалтыг давах" />
-            {selfieUrl ? (
-              <div className="flex flex-col items-center gap-4 py-4 text-center">
-                <img src={selfieUrl} alt="Селфи" className="h-44 w-44 rounded-full border border-zinc-200 object-cover dark:border-white/10" />
-                <Button full onClick={() => setCameraOpen({ kind: "selfie" })}>Дахин авах</Button>
-              </div>
-            ) : (
-              <Button full onClick={() => setCameraOpen({ kind: "selfie" })}>
-                <ScanFace className="h-4 w-4" /> Селфи авах
-              </Button>
-            )}
-            <WizardNav onBack={() => setStep(2)} onNext={next} nextLabel="Үргэлжлүүлэх" nextDisabled={!selfieOk} />
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {/* STEP 4 — Эцэг эх */}
-      {step === 4 ? (
         <Card>
           <CardContent className="space-y-5">
             <StepHeader icon={<Users className="h-5 w-5" />} title="Эцэг эхийн мэдээлэл" subtitle="Бүх талбар заавал" />
             <ParentGroup label="Эцэг" value={father} onChange={setFather} />
             <ParentGroup label="Эх" value={mother} onChange={setMother} />
-            <WizardNav onBack={() => setStep(3)} onNext={next} nextLabel="Үргэлжлүүлэх" nextDisabled={!parentsOk} />
+            <WizardNav onBack={() => setStep(2)} onNext={next} nextLabel="Үргэлжлүүлэх" nextDisabled={!parentsOk} />
           </CardContent>
         </Card>
       ) : null}
 
-      {/* STEP 5 — Банк */}
-      {step === 5 ? (
+      {/* STEP 4 — Банк */}
+      {step === 4 ? (
         <Card>
           <CardContent className="space-y-4">
             <StepHeader icon={<Banknote className="h-5 w-5" />} title="Банкны данс" subtitle="Цалин/комисс авах данс — нэмэх/хасах" />
@@ -449,13 +429,13 @@ export function ApplyWizard({
             <Button variant="secondary" size="sm" onClick={() => setBanks((prev) => [...prev, { bankName: "", accountNumber: "" }])}>
               <Plus className="h-4 w-4" /> Данс нэмэх
             </Button>
-            <WizardNav onBack={() => setStep(4)} onNext={next} nextLabel="Үргэлжлүүлэх" nextDisabled={!bankOk} />
+            <WizardNav onBack={() => setStep(3)} onNext={next} nextLabel="Үргэлжлүүлэх" nextDisabled={!bankOk} />
           </CardContent>
         </Card>
       ) : null}
 
-      {/* STEP 6 — Хаяг */}
-      {step === 6 ? (
+      {/* STEP 5 — Хаяг */}
+      {step === 5 ? (
         <Card>
           <CardContent className="space-y-4">
             <StepHeader icon={<MapPin className="h-5 w-5" />} title="Гэрийн хаяг / Байршил" subtitle="VPN/прокси MЭДЭГДСЭН тохиолдолд хаяг авахыг хориглоно" />
@@ -477,7 +457,27 @@ export function ApplyWizard({
                 <Globe className="h-4 w-4" /> Байршил авах (GPS)
               </Button>
             )}
-            <WizardNav onBack={() => setStep(5)} onNext={next} nextLabel="Хяналт руу" nextDisabled={!addressOk} />
+            <WizardNav onBack={() => setStep(4)} onNext={next} nextLabel="Селфи рүү" nextDisabled={!addressOk} />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* STEP 6 — Селфи (бүртгүүлэхээс өмнө, нүүр царай уншуулах) */}
+      {step === 6 ? (
+        <Card>
+          <CardContent className="space-y-4">
+            <StepHeader icon={<ScanFace className="h-5 w-5" />} title="Селфи (нүүр царай)" subtitle="Анкет илгээхээс өмнө нүүр царайгаа уншуулна — Liveness шалгалтыг давах шаардлагатай" />
+            {selfieUrl ? (
+              <div className="flex flex-col items-center gap-4 py-4 text-center">
+                <img src={selfieUrl} alt="Селфи" className="h-44 w-44 rounded-full border border-zinc-200 object-cover dark:border-white/10" />
+                <Button full onClick={() => setCameraOpen({ kind: "selfie" })}>Дахин авах</Button>
+              </div>
+            ) : (
+              <Button full onClick={() => setCameraOpen({ kind: "selfie" })}>
+                <ScanFace className="h-4 w-4" /> Селфи авах
+              </Button>
+            )}
+            <WizardNav onBack={() => setStep(5)} onNext={next} nextLabel="Үргэлжлүүлэх" nextDisabled={!selfieOk} />
           </CardContent>
         </Card>
       ) : null}
