@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   ARHAT MODERATOR — Design tokens
+   Premium fintech/security dashboard aesthetic
+   ============================================================ */
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --bg: #f6f7f9;
+    --ink: #09090b;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --bg: #05070d;
+    --ink: #fafafa;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-[#f6f7f9] text-zinc-900 antialiased dark:bg-[#05070d] dark:text-zinc-100;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    @apply bg-brand-500/25;
+  }
+
+  /* Scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(120, 120, 130, 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(120, 120, 130, 0.35);
+  }
+}
+
+@layer utilities {
+  /* Hero background — нарийн radial glow */
+  .bg-hero {
+    background-image:
+      radial-gradient(60% 50% at 50% -10%, rgba(16, 185, 129, 0.16), transparent 70%),
+      radial-gradient(40% 40% at 85% 10%, rgba(45, 212, 191, 0.08), transparent 70%);
+  }
+
+  .bg-hero-light {
+    background-image:
+      radial-gradient(60% 50% at 50% -10%, rgba(16, 185, 129, 0.12), transparent 70%),
+      radial-gradient(40% 40% at 85% 10%, rgba(45, 212, 191, 0.07), transparent 70%);
+  }
+
+  /* Verified badge shimmer gradient */
+  .badge-shimmer {
+    background-size: 200% 100%;
+  }
+
+  .text-gradient-brand {
+    @apply bg-gradient-to-r from-brand-400 via-teal-300 to-brand-400 bg-clip-text text-transparent;
+  }
+
+  /* Table styling */
+  .table-base {
+    @apply w-full border-collapse text-left text-sm;
+  }
+  .table-base thead th {
+    @apply border-b border-zinc-200/80 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:border-white/8;
+  }
+  .table-base tbody td {
+    @apply border-b border-zinc-100 px-4 py-3.5 text-sm text-zinc-700 dark:border-white/5 dark:text-zinc-300;
+  }
+  .table-base tbody tr {
+    @apply transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03];
+  }
+  .table-base tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  /* Focus ring (accessibility) */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60;
+  }
+}
+
+/* Number tabular */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Input number arrows zero out */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
