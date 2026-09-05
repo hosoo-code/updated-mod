@@ -35,8 +35,29 @@ export default async function ApplyPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login?next=/moderator/apply");
 
-  // Хэрэглэгч аль хэдийн approved байгаа эсэхийг шалгана — дахин draft үүсгэхгүй
-  const anyApp = await getModeratorApplicationByUser(user.id);
+  // Өгөгдлийн сангийн алдаа (таблиц алга, сүлжээ гэх мэт) — хуудсыг
+  // blank болгохгүйгээр найрсаг мэдээлэл харуулна.
+  let anyApp: ModeratorApplicationData | null;
+  let app: ModeratorApplicationData | null;
+  try {
+    // Хэрэглэгч аль хэдийн approved байгаа эсэхийг шалгана — дахин draft үүсгэхгүй
+    anyApp = await getModeratorApplicationByUser(user.id);
+    app = await getModeratorApplicationForUser(user.id);
+    if (!app) {
+      app = await createModeratorApplication(user.id);
+    }
+  } catch (e) {
+    console.error("[apply] Анкет ачааллахад алдаа гарлаа:", e);
+    return (
+      <Shell>
+        <Heading />
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-sm text-amber-700 dark:text-amber-300">
+          Анкетын мэдээллийг ачааллахад алдаа гарлаа. Хэсэг хугацааны дараа дахин оролдоно уу.
+        </div>
+      </Shell>
+    );
+  }
+
   if (anyApp?.status === "approved") {
     return (
       <Shell>
@@ -50,13 +71,10 @@ export default async function ApplyPage() {
   }
 
   // draft/editable байвал ачаална, эс bол шинэ draft үүсгэнэ
-  let app = await getModeratorApplicationForUser(user.id);
-  if (!app) {
-    app = await createModeratorApplication(user.id);
-  }
   if (!app) {
     return (
       <Shell>
+        <Heading />
         <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
           Анкет үүсгэхэд алдаа гарлаа. Дахин оролдоно уу.
         </p>

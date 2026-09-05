@@ -29,25 +29,38 @@ async function readDemoSession(): Promise<SessionUser | null> {
   };
 }
 
+/**
+ * Supabase session унших. Алдаа гарвал (env буруу/алга, сүлжээ доголдол,
+ * schema эсвэл profiles таблиц байхгүй) — ХЭЗЭЭ ч throw ХИЙХГҮЙ, null буцаана.
+ * Ингэснээр Landing/Header гэх мэт бүх page архитектурын алдаанаас
+ * үл хамааран рендэр хийгдэнэ (blank/404-өөс сэргийнэ).
+ */
 async function readSupabaseSession(): Promise<SessionUser | null> {
-  const sb = await createSupabaseServer();
-  const { data } = await sb.auth.getUser();
-  const user = data.user;
-  if (!user) return null;
-  const { data: profile } = await sb
-    .from("profiles")
-    .select("full_name, role, moderator_id")
-    .eq("id", user.id)
-    .maybeSingle();
-  const role =
-    profile?.role === "admin" || profile?.role === "super_admin" ? "admin" : "user";
-  return {
-    id: user.id,
-    email: user.email ?? "",
-    role,
-    fullName: profile?.full_name ?? null,
-    moderatorId: profile?.moderator_id ?? null,
-  };
+  try {
+    const sb = await createSupabaseServer();
+    const { data } = await sb.auth.getUser();
+    const user = data.user;
+    if (!user) return null;
+    const { data: profile } = await sb
+      .from("profiles")
+      .select("full_name, role, moderator_id")
+      .eq("id", user.id)
+      .maybeSingle();
+    const role =
+      profile?.role === "admin" || profile?.role === "super_admin" ? "admin" : "user";
+    return {
+      id: user.id,
+      email: user.email ?? "",
+      role,
+      fullName: profile?.full_name ?? null,
+      moderatorId: profile?.moderator_id ?? null,
+    };
+  } catch (e) {
+    // Session унших боломжгүй үед хуудсыг унагахгүй — гост/алдаагүй рендэр.
+    // (Supabase env тохируулаагүй, сүлжээ доголдол, schema алга гэх мэт.)
+    console.error("[auth] Session уншихад алдаа гарлаа:", e);
+    return null;
+  }
 }
 
 /** Одоогийн session-ийг унших (server-side). Client-ийн мэдээлэлд итгэхгүй. */

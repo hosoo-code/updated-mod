@@ -16,11 +16,31 @@ import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getAdminStats } from "@/lib/repo";
 import { formatDateTime, formatShortDate } from "@/lib/utils";
+import type { AdminStats } from "@/types";
 
 export const dynamic = "force-dynamic";
 
+const EMPTY_STATS: AdminStats = {
+  totalModerators: 0,
+  verifiedModerators: 0,
+  pendingVerification: 0,
+  rejectedVerification: 0,
+  totalGroups: 0,
+  totalMembers: 0,
+  verificationActivity: [],
+  weeklyOverview: [],
+  recentApplications: [],
+};
+
 export default async function AdminOverviewPage() {
-  const stats = await getAdminStats();
+  // Статистик ачааллахад алдаа гарвал (env алга, сүлжээ) — dashboard-ийг
+  // blank болгохгүй, хоосон stats-аар рендэр хийнэ.
+  let stats = EMPTY_STATS;
+  try {
+    stats = await getAdminStats();
+  } catch (e) {
+    console.error("[admin] Статистик ачааллахад алдаа гарлаа:", e);
+  }
   const maxActivity = Math.max(1, ...stats.verificationActivity.map((a) => a.count));
 
   return (
