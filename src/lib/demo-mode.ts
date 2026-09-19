@@ -1,23 +1,17 @@
 import { isSupabaseConfigured } from "./env";
 
 /**
- * DEMO MODE
- * ---------
- * Supabase/R2 тохируулаагүй орчинд (жишээ нь dev/preview) бүрэн UI/UX-ийг
- * үзүүлэхийн тулд in-memory өгөгдлийн сан ашиглана.
+ * Demo mode is enabled whenever Supabase is not fully configured.
  *
- * PRODUCTION-Д ДЕМО БҮРМӨСӨН УНТРААНА:
- *   Environment хувьсагчд `DISABLE_DEMO_MODE=true` тавь. Тэр үед
- *   Supabase env тохируулсан эсэхээс үл хамааран demo горим router-ээс
- *   хэзээ ч идэвхжихгүй — бүх өгөгдөл Supabase/R2-оос уншигдана.
- *
- * Анхаар: `DISABLE_DEMO_MODE=true` үед Supabase env тохируулаагүй бол
- * демо өгөгдөл алга, апп Supabase холбоогүй эвдрэх нь зөв — энэ нь
- * production-д Supabase заавал байх ёстой гэдгийг хангадаг.
+ * Vercel дээр Environment Variables-ийг хэсэгчлэн нэмсэн үед хуучин код real
+ * mode руу орж, хоосон/буруу Supabase тохиргооноос болж page render унадаг
+ * байсан. Бүх Supabase утга зөв болсон үед л production mode ажиллана.
  */
 export function isDemoMode(): boolean {
-  // DISABLE_DEMO_MODE=true → ямар ч нөхцөлд demo БИШ (production баталгаа)
-  if (process.env.DISABLE_DEMO_MODE === "true") return false;
-  // Supabase тохируулаагүй л бол demo (dev/test/preview)
-  return !isSupabaseConfigured();
+  const supabaseConfigured = isSupabaseConfigured();
+
+  // Supabase-ийн URL/key байхгүй эсвэл буруу байвал demo fallback ажиллана.
+  // DISABLE_DEMO_MODE нь зөвхөн бүрэн тохирсон Supabase-тай үед demo-г унтраана.
+  if (!supabaseConfigured) return true;
+  return process.env.DISABLE_DEMO_MODE !== "true" && !supabaseConfigured;
 }
