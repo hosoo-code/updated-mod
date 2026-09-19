@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { withApi, readJson } from "@/lib/api-helpers";
-import { createSupabaseServer } from "@/lib/supabase/server";
+import { createServiceClient, createSupabaseServer } from "@/lib/supabase/server";
 import { isDemoMode } from "@/lib/demo-mode";
 import { err, ok } from "@/lib/security";
 import { z } from "zod";
@@ -29,5 +29,28 @@ export const POST = withApi(async (req) => {
   if (error) {
     return err("Бүртгэл үүсгэхэд алдаа гарлаа: " + error.message, 400);
   }
+
+  // auth.users үүссэний дараа public.profiles мөрийг сервер талаас баталгаатай үүсгэнэ.
+  // Энэ нь SQL trigger ажиллаагүй/хуучин schema-тэй байсан үед ч profile хоосон үлдэхээс сэргийлнэ.
+  if (data.user) {
+    try {
+      const service = await createServiceClient();
+      const { error: profileError } = await service.from("profiles").upsert(
+        {
+          id: data.user.id,
+          full_name: parsed.data.fullName,
+          role: "user",
+        },
+        { onConflict: "id" }
+      );
+      if (profileError) {
+        console.error("[register] Profile үүсгэхэд алдаа гарлаа:", profileError);
+      }
+    } catch (profileError) {
+      // Auth бүртгэл амжилттай болсон тул profile-ийн алдаа бүртгэлийг бүхэлд нь унагаахгүй.
+      console.error("[register] Profile sync failed:", profileError);
+    }
+  }
+
   return ok({ needsEmailConfirm: !data.session });
 });
