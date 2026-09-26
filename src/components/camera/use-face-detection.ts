@@ -26,6 +26,8 @@ export interface FaceBox {
 /** Blink илрүүлэлтийн үр дүн — FaceLandmarker-аас 2 нүдний EAR */
 export interface BlinkResult {
   blinkSeen: boolean;
+  /** Number of completed blink cycles observed by this detector instance. */
+  blinkCount: number;
   /** Нүд анивчихын тулд EAR < 0.23 болсон байх ёстой */
   earBelow: boolean;
 }
@@ -136,24 +138,49 @@ function resetMediaPipeLoader() {
   mediaPipeLoaderPromise = null;
 }
 
+const XNNPACK_INFO = "Created TensorFlow Lite XNNPACK delegate for CPU";
+let infoSuppressionDepth = 0;
+let originalConsoleInfo: typeof console.info | null = null;
+let suppressedConsoleInfo: typeof console.info | null = null;
+
+function isXnnpackInfo(args: unknown[]): boolean {
+  return args.map(String).join(" ").includes(XNNPACK_INFO);
+}
+
 /**
- * MediaPipe детектор үүсгэх — эхлээд GPU (хурдан), GPU амжилтгүй бол CPU.
- * PRoot/ARM/Android Chrome дээр GPU delegate байнга алдаа өгдөг — CPU fallback
- * нь юу ч байсан детектор ажиллах баталгааг өгнө (гацахаас сэргийлнэ).
+ * MediaPipe/WASM emits this informational line while creating the CPU
+ * delegate. Next dev may display it as a console error, so suppress only this
+ * exact message during delegate creation. A depth counter keeps concurrent
+ * detector initialization from restoring another wrapper too early.
+ */
+function beginInfoSuppression() {
+  if (infoSuppressionDepth++ > 0) return;
+  originalConsoleInfo = console.info;
+  const baseInfo = originalConsoleInfo;
+  suppressedConsoleInfo = (...args: unknown[]) => {
+    if (isXnnpackInfo(args)) return;
+    baseInfo(...args);
+  };
+  console.info = suppressedConsoleInfo;
+}
+
+function endInfoSuppression() {
+  infoSuppressionDepth = Math.max(0, infoSuppressionDepth - 1);
+  if (infoSuppressionDepth !== 0) return;
+  if (originalConsoleInfo && (!suppressedConsoleInfo || console.info === suppressedConsoleInfo)) {
+    console.info = originalConsoleInfo;
+  }
+  originalConsoleInfo = null;
+  suppressedConsoleInfo = null;
+}
+
+/**
+ * MediaPipe детектор үүсгэх — эхлээд GPU (хурдан), CPU fallback.
  */
 async function createWithDelegateFallback<T>(
   factory: (delegate: "GPU" | "CPU") => Promise<T>
 ): Promise<T | null> {
-  // MediaPipe/WASM-ийн XNNPACK нь CPU delegate үүсгэхдээ console.info-оор
-  // мэдээлэл хэвлэдэг. Next dev overlay үүнийг error stack шиг харуулдаг тул
-  // зөвхөн энэ тогтмол мэдээллийг түр шүүнэ; бодит warning/error-ийг хэзээ ч
-  // дарахгүй.
-  const originalInfo = console.info;
-  console.info = (...args: unknown[]) => {
-    const message = args.map(String).join(" ");
-    if (message.includes("Created TensorFlow Lite XNNPACK delegate for CPU")) return;
-    originalInfo(...args);
-  };
+  beginInfoSuppression();
   try {
     try {
       return await factory("GPU");
@@ -166,7 +193,7 @@ async function createWithDelegateFallback<T>(
       return null;
     }
   } finally {
-    console.info = originalInfo;
+    endInfoSuppression();
   }
 }
 
@@ -269,6 +296,7 @@ async function loadMediaPipeLoader() {
             // Blink state (агшсан эсэх)
             let earBelowCount = 0;
             let blinkSeen = false;
+            let blinkCount = 0;
             let blinkClosed = false;
             return {
               async detect(video, ts) {
@@ -281,29 +309,10 @@ async function loadMediaPipeLoader() {
                   // MediaPipe зарим browser/CPU delegate дээр нэг frame-ийг уншихдаа
                   // дотроо exception гаргаж болно. Нэг frame алгасаад дараагийн
                   // timestamp-ээр үргэлжлүүлэх нь camera flow-г таслахгүй.
-                  return { faces: [], blink: { blinkSeen, earBelow: earBelowCount > 0 }, occluded: false };
+                  return { faces: [], blink: { blinkSeen, blinkCount, earBelow: earBelowCount > 0 }, occluded: false };
                 }
                 const landmarks = res.faceLandmarks ?? [];
                 const validLandmarks = landmarks.filter((lm: { x: number; y: number }[]) => lm.length >= 380);
-                const primary = validLandmarks[0];
-                if (!primary) {
-                  return { faces: [], blink: { blinkSeen, earBelow: earBelowCount > 0 }, occluded: false };
-                }
-
-                const e = (ear(primary, LEFT_EYE) + ear(primary, RIGHT_EYE)) / 2;
-                if (e < 0.23) {
-                  earBelowCount++;
-                  if (earBelowCount >= 2) {
-                    blinkClosed = true;
-                  }
-                } else {
-                  if (blinkClosed && e > 0.27) {
-                    blinkSeen = true;
-                    blinkClosed = false;
-                  }
-                  earBelowCount = 0;
-                }
-
                 const toFaceBox = (lm: { x: number; y: number }[]): FaceBox => {
                   let minX = 1, maxX = 0, minY = 1, maxY = 0;
                   for (const p of lm) {
@@ -324,10 +333,31 @@ async function loadMediaPipeLoader() {
                     noseY: nose ? nose.y : undefined,
                   };
                 };
+                const primary = validLandmarks.length === 1 ? validLandmarks[0] : undefined;
+                if (!primary) {
+                  earBelowCount = 0;
+                  blinkClosed = false;
+                  return { faces: validLandmarks.map(toFaceBox), blink: { blinkSeen, blinkCount, earBelow: false }, occluded: false };
+                }
+
+                const e = (ear(primary, LEFT_EYE) + ear(primary, RIGHT_EYE)) / 2;
+                if (e < 0.23) {
+                  earBelowCount++;
+                  if (earBelowCount >= 2) {
+                    blinkClosed = true;
+                  }
+                } else {
+                  if (blinkClosed && e > 0.27) {
+                    blinkSeen = true;
+                    blinkCount++;
+                    blinkClosed = false;
+                  }
+                  earBelowCount = 0;
+                }
 
                 return {
                   faces: validLandmarks.map(toFaceBox),
-                  blink: { blinkSeen, earBelow: earBelowCount > 0 },
+                  blink: { blinkSeen, blinkCount, earBelow: earBelowCount > 0 },
                   occluded: detectCovered(primary),
                 };
               },
@@ -376,7 +406,7 @@ export function useFaceDetection(
   enabled: boolean
 ) {
   const [faces, setFaces] = useState<FaceBox[]>([]);
-  const [blink, setBlink] = useState<BlinkResult>({ blinkSeen: false, earBelow: false });
+  const [blink, setBlink] = useState<BlinkResult>({ blinkSeen: false, blinkCount: 0, earBelow: false });
   const [occluded, setOccluded] = useState(false);
   const [backend, setBackend] = useState<"native" | "mediapipe" | "landmarker" | "none">("none");
   const backendRef = useRef<DetectorBackend | null>(null);
@@ -446,7 +476,7 @@ export function useFaceDetection(
       widthHistoryRef.current = [];
       centerHistoryRef.current = [];
       setFaces([]);
-      setBlink({ blinkSeen: false, earBelow: false });
+      setBlink({ blinkSeen: false, blinkCount: 0, earBelow: false });
       setOccluded(false);
     };
   }, [enabled, videoRef]);

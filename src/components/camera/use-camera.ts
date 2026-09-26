@@ -23,6 +23,9 @@ export function useCamera(facingMode: "environment" | "user" = "environment") {
   const [status, setStatus] = useState<CameraStatus>("idle");
 
   const stop = useCallback(() => {
+    // Invalidate any pending getUserMedia result before stopping the current stream.
+    // Otherwise a late permission response can resurrect the preview after stop().
+    ++genRef.current;
     // CAMERA CLEANUP — track бүрийг зогсооно
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -37,8 +40,8 @@ export function useCamera(facingMode: "environment" | "user" = "environment") {
   const genRef = useRef(0);
 
   const start = useCallback(async () => {
-    const gen = ++genRef.current;
     stop();
+    const gen = ++genRef.current;
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setStatus("unavailable");
       return;

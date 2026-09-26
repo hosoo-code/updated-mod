@@ -72,7 +72,9 @@ export function FaceCapture({
   const [holdSince, setHoldSince] = useState<number | null>(null);
   const [holdProgress, setHoldProgress] = useState(0);
   const [stalled, setStalled] = useState(false);
+  const [blinkSatisfied, setBlinkSatisfied] = useState(false);
   const poseFrameCountRef = useRef(0);
+  const centerBlinkBaselineRef = useRef(0);
 
   // Mount хийгдмэгц камерыг автоматаар эхлүүлнэ
   useEffect(() => {
@@ -96,6 +98,8 @@ export function FaceCapture({
   const poseCapturesRef = useRef<PoseCapture[]>([]);
   const occludedRef = useRef(false);
   occludedRef.current = occluded;
+  const blinkSatisfiedRef = useRef(false);
+  blinkSatisfiedRef.current = blinkSatisfied;
   const completedRef = useRef(false);
   const phaseRef = useRef<Phase>("position");
   const stepIndexRef = useRef(0);
@@ -286,7 +290,7 @@ export function FaceCapture({
 
     const checks: FaceCheckResult["checks"] = {
       faceDetected: detected,
-      singleFace: facesRef.current.length <= 1,
+      singleFace: facesRef.current.length === 1,
       lightingOk: brightnessRef.current !== null && brightnessRef.current >= 62 && brightnessRef.current <= 205,
       centered: guidanceRef.current === "ok",
       stepsCompleted: stepsDone.filter(Boolean).length,
@@ -387,6 +391,15 @@ export function FaceCapture({
   const stalledRef = useRef(stalled);
   stalledRef.current = stalled;
 
+  // A blink is required specifically during the center liveness step.
+  // Positioning alone must not advance the flow and fail only at the end.
+  useEffect(() => {
+    if (phase === "liveness" && LIVENESS_STEPS[stepIndex]?.kind === "center" && blink.blinkCount > centerBlinkBaselineRef.current) {
+      setBlinkSatisfied(true);
+      blinkSatisfiedRef.current = true;
+    }
+  }, [blink.blinkCount, phase, stepIndex]);
+
   // Main state machine — face guidance + 3-байрлалт pose capture
   useEffect(() => {
     if (status !== "active" || phase === "done") return;
@@ -395,11 +408,13 @@ export function FaceCapture({
     const step = LIVENESS_STEPS[stepIndex] ?? null;
     let conditionMet = false;
 
-    if (phase === "position") {
+    if (faces.length !== 1) {
+      conditionMet = false;
+    } else if (phase === "position") {
       // Эхлээд нүүр төвд зөв байрлалд орохыг хүлээнэ ("урд" pose-ийн эхлэл)
       conditionMet = guidance === "ok";
     } else if (step) {
-      if (step.kind === "center") conditionMet = guidance === "ok";
+      if (step.kind === "center") conditionMet = guidance === "ok" && blinkSatisfiedRef.current;
       else conditionMet = headTurnState(face, prevFaceRef.current) === step.kind;
     }
 
@@ -418,6 +433,9 @@ export function FaceCapture({
           setHoldSince(null);
           setPhase("liveness");
           setStepIndex(0);
+          centerBlinkBaselineRef.current = blink.blinkCount;
+          setBlinkSatisfied(false);
+          blinkSatisfiedRef.current = false;
           prevFaceRef.current = null;
         } else if (step) {
           // Pose зөв тогтсон үед зураг амжилттай авсны дараа л дараагийн pose руу шилжинэ.
@@ -463,19 +481,27 @@ export function FaceCapture({
   }, [status, phase, faces, guidance, stepIndex, holdSince, finishCapture]);
 
   const currentStep = LIVENESS_STEPS[stepIndex];
+  const livenessInstruction =
+    currentStep?.kind === "center"
+      ? blinkSatisfied
+        ? "Анивчилт бүртгэгдлээ ✓ Нүүрээ хөдөлгөөнгүй барина уу."
+        : blink.earBelow
+          ? "Нүдээ нээгээрэй."
+          : "Нүдээ нэг удаа анивчина уу."
+      : currentStep?.label;
   // Холд progress ring — state machine-тэй ижил нөхцөл (бусад алхмуудад ч харагдана)
   const activeCondition =
     phase === "position"
       ? guidance === "ok"
       : currentStep?.kind === "center"
-        ? guidance === "ok"
-        : !!currentStep &&
+        ? guidance === "ok" && blinkSatisfied
+        : faces.length === 1 && !!currentStep &&
           headTurnState(faces[0] ?? null, prevFaceRef.current) === currentStep.kind;
   const showHold = activeCondition && holdSince !== null;
   const holdCount = showHold ? Math.max(1, Math.ceil((1 - holdProgress) * 3)) : null;
 
   return (
-    <div className="safe-pt safe-pb fixed inset-0 z-[70] flex flex-col bg-zinc-950">
+    <div className="safe-pt safe-pb fixed inset-0 z-[70] flex flex-col bg-[#070b18]">
       <div className="relative z-20 flex min-h-14 items-center gap-3 border-b border-white/10 px-4 py-2">
         <button
           onClick={onCancel}
@@ -487,7 +513,7 @@ export function FaceCapture({
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-white">Нүүрний баталгаажуулалт</p>
           <p className="truncate text-xs text-zinc-400">
-            {phase === "position" ? "Нүүрээ хүрээний төвд байрлуулна уу." : currentStep?.label}
+            {phase === "position" ? "Нүүрээ хүрээний төвд байрлуулна уу." : livenessInstruction}
           </p>
         </div>
         <ScanFace className="h-5 w-5 text-white" />
@@ -536,12 +562,18 @@ export function FaceCapture({
         ) : (
           <>
             <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
-            <div className="pointer-events-none absolute inset-0">
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(7,11,24,0.76) 0%, transparent 24%, transparent 68%, rgba(7,11,24,0.94) 100%)",
+              }}
+            >
               <div
                 className="absolute inset-0"
                 style={{
                   background:
-                    "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.78) 100%)",
+                    "radial-gradient(ellipse at center, transparent 34%, rgba(7,11,24,0.78) 100%)",
                 }}
               />
               {/* Oval guide */}
@@ -600,7 +632,7 @@ export function FaceCapture({
           ) : null}
           <div
             className={cn(
-              "mx-auto flex w-fit max-w-full items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium backdrop-blur-md transition-all duration-300",
+              "mx-auto flex w-fit max-w-full items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium backdrop-blur-md transition-all duration-300",
               activeCondition
                 ? "border-white/30 bg-white/15 text-white"
                 : "border-white/15 bg-zinc-900/80 text-zinc-200",
@@ -617,7 +649,7 @@ export function FaceCapture({
                 : stalled
                   ? "Толгойгоо зөв байрлалд тогтвортой барина уу…"
                   : phase === "liveness"
-                    ? currentStep?.label
+                    ? livenessInstruction
                     : FACE_GUIDANCE_TEXT[guidance]}
             </span>
           </div>
