@@ -1,0 +1,325 @@
+import { z } from "zod";
+
+/**
+ * Бүх input-ыг Zod-оор сервер талд баталгаажуулна.
+ * Client-ийн утгуудад хэзээ ч шууд итгэхгүй.
+ */
+
+export const FACEBOOK_URL_REGEX =
+  /^https?:\/\/(www\.)?(facebook\.com|fb\.com)\/(profile\.php\?id=\d+|[A-Za-z0-9.\-_]+)\/?.*$/i;
+
+export const PHONE_REGEX = /^[+]?[-\d\s()]{6,24}$/;
+
+/** Монгол болон олон улсын түгээмэл утасны бичлэгийг нэг мөр шалгана. */
+export const phoneSchema = z
+  .string()
+  .trim()
+  .max(24, "Утасны дугаар 24 тэмдэгтээс ихгүй байна")
+  .refine((value) => PHONE_REGEX.test(value), "Утасны дугаар буруу байна")
+  .refine(
+    (value) => (value.match(/\d/g) ?? []).length >= 8,
+    "Утасны дугаар дор хаяж 8 цифртэй байна"
+  );
+
+const maxString = (max: number, label: string) =>
+  z.string().trim().min(1, `${label} заавал оруулна`).max(max, `${label} хэтэрхий урт`);
+
+export const applicationSchema = z.object({
+  fullName: maxString(80, "Нэр"),
+  nickname: maxString(40, "Moderator нэр"),
+  email: z.string().trim().email("И-мэйл буруу байна"),
+  phone: phoneSchema.optional().or(z.literal("")),
+  facebookUrl: z
+    .string()
+    .trim()
+    .regex(FACEBOOK_URL_REGEX, "Facebook линк буруу байна")
+    .max(200)
+    .optional()
+    .or(z.literal("")),
+  groupsText: z.string().trim().max(300).optional().or(z.literal("")),
+  additionalInfo: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
+export const consentSchema = z.object({
+  version: z.string().trim().min(1).max(20),
+  purpose: z.enum(["identity_verification", "weekly_verification", "location"]),
+});
+
+export const verificationCreateSchema = z.object({
+  documentType: z.enum(["id-card", "birth-certificate"]),
+  // ID нь серверээс үүсдэг opaque identifier — формат албаддаггүй,
+  // эзэмшлийг сервер талд шалгана.
+  consentId: z.string().min(1).max(100),
+});
+
+export const documentRegisterSchema = z.object({
+  objectKey: z.string().min(5).max(500),
+  documentType: z.enum(["id-card", "birth-certificate", "face"]),
+  fileSize: z.number().int().min(1).max(10 * 1024 * 1024),
+  contentType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  faceResult: z
+    .object({
+      passed: z.boolean(),
+      livenessPassed: z.boolean(),
+      checks: z.object({
+        faceDetected: z.boolean(),
+        singleFace: z.boolean(),
+        lightingOk: z.boolean(),
+        centered: z.boolean(),
+        stepsCompleted: z.number().min(0),
+        steps: z.array(z.boolean()).max(6),
+        blinkDetected: z.boolean(),
+        sizeVariance: z.number().min(0),
+        colorConsistent: z.boolean(),
+        totalElapsedMs: z.number().min(0),
+        confidence: z.number().min(0).max(1),
+        // Шинэ 3-байрлалт нүүр бүртгэл — хуучин client response-д байхгүй тул optional
+        poseCaptures: z.number().min(0).max(3).optional(),
+        occluded: z.boolean().optional(),
+      }),
+      note: z.string().max(300).nullable(),
+    })
+    .optional(),
+});
+
+export const uploadUrlSchema = z.object({
+  requestId: z.string().min(1).max(100),
+  documentType: z.enum(["id-card", "birth-certificate", "face"]),
+  contentType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  fileSize: z.number().int().min(1).max(10 * 1024 * 1024),
+});
+
+export const weeklyLocationSchema = z.object({
+  consentId: z.string().min(1).max(100).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  accuracy: z.number().min(0).max(100_000).optional(),
+});
+
+export const profileUpdateSchema = z.object({
+  nickname: maxString(40, "Moderator нэр").optional(),
+  facebookUrl: z
+    .string()
+    .trim()
+    .regex(FACEBOOK_URL_REGEX, "Facebook линк буруу байна")
+    .max(200)
+    .optional()
+    .or(z.literal("")),
+  phone: phoneSchema.optional().or(z.literal("")),
+});
+
+// ---------- Admin schemas ----------
+
+export const groupSchema = z.object({
+  name: maxString(120, "Group нэр"),
+  facebookUrl: z
+    .string()
+    .trim()
+    .regex(FACEBOOK_URL_REGEX, "Facebook линк буруу байна")
+    .max(200)
+    .optional()
+    .or(z.literal("")),
+  memberCount: z.coerce.number().int().min(0).max(100_000_000),
+  description: z.string().trim().max(1000).optional().or(z.literal("")),
+  price: z.coerce.number().int().min(0).max(1_000_000_000).optional(),
+  isActive: z.boolean(),
+});
+
+export const priceSchema = z.object({
+  title: maxString(60, "Гарчиг"),
+  durationMonths: z.coerce.number().int().min(1).max(60),
+  price: z.coerce.number().int().min(0).max(1_000_000_000),
+  description: z.string().trim().max(500).optional().or(z.literal("")),
+  isActive: z.boolean(),
+});
+
+export const accountSchema = z.object({
+  bankName: maxString(80, "Банкны нэр"),
+  accountHolder: maxString(120, "Данс эзэмшигчийн нэр"),
+  accountNumber: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{6,20}$/, "Дансны дугаар зөвхөн цифр байх ёстой"),
+  note: z.string().trim().max(300).optional().or(z.literal("")),
+  isActive: z.boolean(),
+});
+
+export const reviewDecisionSchema = z.object({
+  decision: z.enum(["approve", "reject", "resubmit"]),
+  reason: z
+    .enum(["unclear", "expired_document", "face_failed", "mismatch", "other"])
+    .optional(),
+  note: z.string().trim().max(500).optional().or(z.literal("")),
+});
+
+export const settingsSchema = z.object({
+  documentRetentionDays: z.coerce.number().int().min(1).max(3650),
+  weeklyVerificationEnabled: z.boolean(),
+  weeklyIntervalDays: z.coerce.number().int().min(1).max(90),
+  consentVersion: z.string().trim().min(1).max(20),
+});
+
+export const applicationDecisionSchema = z.object({
+  decision: z.enum(["approve", "reject"]),
+  moderatorId: z.string().optional(),
+});
+
+export const moderatorAdminSchema = z.object({
+  fullName: maxString(80, "Нэр"),
+  nickname: maxString(40, "Moderator нэр"),
+  facebookUrl: z
+    .string()
+    .trim()
+    .regex(FACEBOOK_URL_REGEX, "Facebook линк буруу байна")
+    .max(200)
+    .optional()
+    .or(z.literal("")),
+  phone: phoneSchema.optional().or(z.literal("")),
+  locationText: z.string().trim().max(200).optional().or(z.literal("")),
+  isPublic: z.boolean(),
+  isActive: z.boolean(),
+  groupIds: z.array(z.string()).max(50),
+});
+
+/* ============ Moderator application (олон алхамт анкет) ============ */
+
+/** Анкетын зургийн slot — иргэний үнэмлэх урд/ард + селфи + төрсний гэрчилгээ + эцэг/эх үнэмлэх */
+export const APP_IMAGE_SLOTS = [
+  "id-front-0",
+  "id-back-0",
+  "selfie",
+  "selfie-left",
+  "selfie-right",
+  "birth-certificate",
+  "parent-id",
+] as const;
+export type AppImageSlot = (typeof APP_IMAGE_SLOTS)[number];
+
+export const uploadAppImageSchema = z.object({
+  applicationId: z.string().min(1).max(100),
+  slot: z.enum(APP_IMAGE_SLOTS),
+  contentType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  fileSize: z.number().int().min(1).max(10 * 1024 * 1024),
+});
+
+const parentSchema = z.object({
+  // 'id' горимд эцэг/эхийн мэдээлэл шаардлагагүй — хоосон байж болно.
+  // 'birth-cert' горимд superRefine-д бүрэн байхыг шалгана.
+  name: z.string().trim().max(80).or(z.literal("")),
+  phone: phoneSchema.or(z.literal("")),
+  facebookLink: z.string().trim().regex(FACEBOOK_URL_REGEX, "Facebook линк буруу байна").max(200).or(z.literal("")),
+});
+
+const bankSchema = z.object({
+  bankName: z.string().trim().min(1, "Банкны нэр заавал").max(80),
+  accountNumber: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{6,20}$/, "Дансны дугаар зөвхөн цифр (6-20)"),
+});
+
+export const addressFromSubmitSchema = z.object({
+  mapsLink: z.string().url("Google Maps линк буруу байна").max(500),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  accuracy: z.number().min(0).max(100_000).nullable().optional(),
+});
+
+/** Анкет илгээх (submit) эцсийн баталгаажуулалт — сервер талд бүх мэдээлэл бүрэн шалгана */
+export const applyWizardSubmitSchema = z.object({
+  fullName: z.string().trim().min(1, "Нэр заавал оруулна").max(80),
+  facebookLink: z.string().trim().regex(FACEBOOK_URL_REGEX, "Facebook линк буруу байна").max(200),
+  phoneNumbers: z
+    .array(phoneSchema)
+    .min(1, "Үндсэн утасны дугаар заавал")
+    .max(3, "Хамгийн ихдээ 3 дугаар"),
+  educationEmployment: z.object({
+    isStudent: z.boolean(),
+    schoolName: z.string().trim().max(120),
+    schoolGrade: z.string().trim().max(40),
+    teacherName: z.string().trim().max(80),
+    teacherPhone: phoneSchema.or(z.literal("")),
+    teacherFacebookLink: z.string().trim().max(200).refine((v) => !v || FACEBOOK_URL_REGEX.test(v), "Багшийн Facebook линк буруу байна"),
+    isEmployed: z.boolean(),
+    workplaceName: z.string().trim().max(120),
+    workplaceLocation: z.string().trim().max(200),
+    directorPhone: phoneSchema.or(z.literal("")),
+  }),
+  idCardFrontUrls: z.array(z.string().min(5).max(500)).max(1).default([]),
+  idCardBackUrls: z.array(z.string().min(5).max(500)).max(1).default([]),
+  selfieFaceUrl: z.string().min(5).max(500),
+  selfieLeftUrl: z.string().min(5).max(500).optional().nullable().or(z.literal("")),
+  selfieRightUrl: z.string().min(5).max(500).optional().nullable().or(z.literal("")),
+  birthCertificateUrl: z.string().min(5).max(500).optional().nullable().or(z.literal("")),
+  parentIdUrl: z.string().min(5).max(500).optional().nullable().or(z.literal("")),
+  parentIdOwner: z.enum(["father", "mother"]).optional().nullable(),
+  identityDocumentType: z.enum(["id", "birth-cert"]).default("id"),
+  father: parentSchema,
+  mother: parentSchema,
+  bankAccounts: z.array(bankSchema).min(1, "Хамгийн багадаа 1 данс заавал"),
+  address: addressFromSubmitSchema,
+  /** Селфи-ээс цуглуулсан liveness anti-spoof мэдээлэл — admin хяналтад ашиглана */
+  faceResult: z
+    .object({
+      passed: z.boolean(),
+      livenessPassed: z.boolean(),
+      checks: z.object({
+        faceDetected: z.boolean(),
+        singleFace: z.boolean(),
+        lightingOk: z.boolean(),
+        centered: z.boolean(),
+        stepsCompleted: z.number().min(0),
+        steps: z.array(z.boolean()).max(6),
+        blinkDetected: z.boolean(),
+        sizeVariance: z.number().min(0),
+        colorConsistent: z.boolean(),
+        totalElapsedMs: z.number().min(0),
+        confidence: z.number().min(0).max(1),
+        poseCaptures: z.number().min(0).max(3).optional(),
+        occluded: z.boolean().optional(),
+      }),
+      note: z.string().max(300).nullable(),
+    })
+    .nullable()
+    .optional(),
+}).superRefine((data, ctx) => {
+  // Баримтын төрлөөс хамаарсан нөхцөлт шалгалт:
+  // - 'id': өөрийн иргэний үнэмлэх урд+ард ЗААВАЛ (төрсний гэрчилгээ/эцэг эхийн үнэмлэхгүй)
+  // - 'birth-cert': төрсний гэрчилгээ + эцэг/эхийн аль нэгний үнэмлэх ЗААВАЛ (өөрийн үнэмлэхгүй)
+  if (data.educationEmployment.isStudent) {
+    if (!data.educationEmployment.schoolName) ctx.addIssue({ code: "custom", path: ["educationEmployment", "schoolName"], message: "Сургуулийн нэр заавал оруулна" });
+    if (!data.educationEmployment.schoolGrade) ctx.addIssue({ code: "custom", path: ["educationEmployment", "schoolGrade"], message: "Анги заавал оруулна" });
+    if (!data.educationEmployment.teacherName) ctx.addIssue({ code: "custom", path: ["educationEmployment", "teacherName"], message: "Багшийн нэр заавал оруулна" });
+    if (!data.educationEmployment.teacherPhone) ctx.addIssue({ code: "custom", path: ["educationEmployment", "teacherPhone"], message: "Багшийн утас заавал оруулна" });
+    if (!data.educationEmployment.teacherFacebookLink) ctx.addIssue({ code: "custom", path: ["educationEmployment", "teacherFacebookLink"], message: "Багшийн Facebook холбоос заавал оруулна" });
+  }
+  if (data.educationEmployment.isEmployed) {
+    if (!data.educationEmployment.workplaceName) ctx.addIssue({ code: "custom", path: ["educationEmployment", "workplaceName"], message: "Ажлын газрын нэр заавал оруулна" });
+    if (!data.educationEmployment.workplaceLocation) ctx.addIssue({ code: "custom", path: ["educationEmployment", "workplaceLocation"], message: "Ажлын газрын байршил заавал оруулна" });
+    if (!data.educationEmployment.directorPhone) ctx.addIssue({ code: "custom", path: ["educationEmployment", "directorPhone"], message: "Захирал/менежерийн утас заавал оруулна" });
+  }
+  if (data.identityDocumentType === "id") {
+    if (data.idCardFrontUrls.length !== 1)
+      ctx.addIssue({ code: "custom", path: ["idCardFrontUrls"], message: "Иргэний үнэмлэхийн урд талын зураг заавал" });
+    if (data.idCardBackUrls.length !== 1)
+      ctx.addIssue({ code: "custom", path: ["idCardBackUrls"], message: "Иргэний үнэмлэхийн ард талын зураг заавал" });
+  } else {
+    // 'birth-cert'
+    if (!data.birthCertificateUrl || data.birthCertificateUrl === "")
+      ctx.addIssue({ code: "custom", path: ["birthCertificateUrl"], message: "Төрсний гэрчилгээний зураг заавал" });
+    if (!data.parentIdUrl || data.parentIdUrl === "")
+      ctx.addIssue({ code: "custom", path: ["parentIdUrl"], message: "Эцэг/эхийн аль нэгний үнэмлэх заавал" });
+    if (!data.parentIdOwner)
+      ctx.addIssue({ code: "custom", path: ["parentIdOwner"], message: "Аль эцэг/эхийн үнэмлэх болохыг сонгоно уу" });
+    // Төрсний гэрчилгээгээр баталгаажуулж байгаа бол эцэг/эхийн МЭДЭЭЛЭЛ (хоёулаа) заавал
+    if (!data.father.name.trim() || !data.father.phone.trim() || !data.father.facebookLink.trim())
+      ctx.addIssue({ code: "custom", path: ["father"], message: "Эцэгийн мэдээлэл заавал бөглөнө үү" });
+    if (!data.mother.name.trim() || !data.mother.phone.trim() || !data.mother.facebookLink.trim())
+      ctx.addIssue({ code: "custom", path: ["mother"], message: "Эхийн мэдээлэл заавал бөглөнө үү" });
+  }
+});
+
+export const setApplicationStatusSchema = z.object({
+  decision: z.enum(["approve", "reject", "editable"]),
+  notes: z.string().trim().max(500).optional().or(z.literal("")),
+});

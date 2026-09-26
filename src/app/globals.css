@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ARHAT MODERATOR — calm, mobile-first monochrome design system */
+@layer base {
+  :root {
+    color-scheme: light;
+    --bg: #f5f5f7;
+    --surface: #ffffff;
+    --grouped: #ebebef;
+    --ink: #18181b;
+    --muted: #71717a;
+    --separator: rgba(24, 24, 27, 0.12);
+  }
+
+  .dark {
+    color-scheme: dark;
+    --bg: #09090b;
+    --surface: #18181b;
+    --grouped: #27272a;
+    --ink: #fafafa;
+    --muted: #a1a1aa;
+    --separator: rgba(255, 255, 255, 0.12);
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+    background: var(--bg);
+  }
+
+  body {
+    @apply bg-[#f5f5f7] text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+
+  ::selection { @apply bg-zinc-900/15 dark:bg-white/20; }
+
+  * { scrollbar-width: thin; scrollbar-color: rgba(113, 113, 122, 0.45) transparent; }
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(113, 113, 122, 0.45); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  .bg-hero, .bg-hero-light { background-image: none; }
+  .text-gradient-brand { @apply text-zinc-950 dark:text-white; background: none; }
+
+  .page-shell { @apply mx-auto w-full max-w-6xl px-4 sm:px-6; }
+  .safe-pb { padding-bottom: max(1.5rem, env(safe-area-inset-bottom)); }
+  .safe-pt { padding-top: env(safe-area-inset-top); }
+  .surface-group { @apply rounded-2xl border border-zinc-200/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.03)] dark:border-white/10 dark:bg-zinc-900; }
+
+  .table-base { @apply w-full border-collapse text-left text-sm; }
+  .table-base thead th { @apply border-b border-zinc-200 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:border-white/10 dark:text-zinc-400; }
+  .table-base tbody td { @apply border-b border-zinc-100 px-4 py-3.5 text-sm text-zinc-700 dark:border-white/5 dark:text-zinc-300; }
+  .table-base tbody tr { @apply transition-colors hover:bg-zinc-50 dark:hover:bg-white/[0.04]; }
+  .table-base tbody tr:last-child td { @apply border-b-0; }
+
+  .focus-ring { @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 dark:focus-visible:ring-white dark:focus-visible:ring-offset-zinc-950; }
+}
+
+.tabular-nums { font-variant-numeric: tabular-nums; }
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
