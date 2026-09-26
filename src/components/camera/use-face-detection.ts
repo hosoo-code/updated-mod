@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  *
  * Давуу эрх: (1) Native FaceDetector API (Android Chrome/Edge),
  * (2) MediaPipe BlazeFace (CDN-ээс runtime-д ачаална, iOS Safari дэмжинэ),
- * (3) MediaPipe FaceLandmarker (нүд анивчсан blink илрүүлэх — урд камер),
+ * (3) MediaPipe FaceLandmarker (liveness-д зориулсан landmark),
  * (4) Боломжгүй бол manual горим (камер ажиллаж, admin хяналт шийднэ).
  *
  * Энэ нь зөвхөн face DETECTION + liveness guidance юм.
@@ -21,15 +21,6 @@ export interface FaceBox {
   height: number;
   noseX?: number; // nose keypoint (байвал)
   noseY?: number;
-}
-
-/** Blink илрүүлэлтийн үр дүн — FaceLandmarker-аас 2 нүдний EAR */
-export interface BlinkResult {
-  blinkSeen: boolean;
-  /** Number of completed blink cycles observed by this detector instance. */
-  blinkCount: number;
-  /** Нүд анивчихын тулд EAR < 0.23 болсон байх ёстой */
-  earBelow: boolean;
 }
 
 export type FaceGuidance =
@@ -76,7 +67,6 @@ interface NativeDetection {
 interface DetectorBackend {
   detect: (video: HTMLVideoElement, ts: number) => Promise<{
     faces: FaceBox[];
-    blink?: BlinkResult;
     /** Нүүр халхалсан (маск/гар) — зөвхөн FaceLandmarker-ийн үед тооцогдоно, бусад backend-д байхгүй */
     occluded?: boolean;
   }>;
@@ -274,18 +264,6 @@ async function loadMediaPipeLoader() {
             // performance.now() зарим production/browser дээр бутархай эсвэл давхардсан
             // утга өгч, detectForVideo warning/error үүсгэхээс хамгаална.
             let lastVideoTimestamp = 0;
-            // EAR (Eye Aspect Ratio) index: 2 нүд
-            const LEFT_EYE = [33, 160, 158, 133, 153, 144];
-            const RIGHT_EYE = [362, 385, 387, 263, 373, 380];
-            const ear = (lm: { x: number; y: number }[], idx: number[]): number => {
-            const p = (i: number | undefined) => lm[i ?? 0] ?? { x: 0, y: 0 };
-              const d = (a: { x: number; y: number }, b: { x: number; y: number }) =>
-                Math.hypot(a.x - b.x, a.y - b.y);
-              const v1 = d(p(idx[1]), p(idx[5]));
-              const v2 = d(p(idx[2]), p(idx[4]));
-              const h = d(p(idx[0]), p(idx[3]));
-              return h === 0 ? 0 : (v1 + v2) / (2 * h);
-            };
             /**
              * Occlusion is deliberately advisory. A single FaceLandmarker frame
              * cannot reliably distinguish a covered mouth from a closed mouth,
@@ -293,11 +271,6 @@ async function loadMediaPipeLoader() {
              * uncertain geometric guess into a hard liveness failure.
              */
             const detectCovered = (_lm: { x: number; y: number }[]): boolean => false;
-            // Blink state (агшсан эсэх)
-            let earBelowCount = 0;
-            let blinkSeen = false;
-            let blinkCount = 0;
-            let blinkClosed = false;
             return {
               async detect(video, ts) {
                 const safeTimestamp = Math.max(lastVideoTimestamp + 1, Math.floor(ts));
@@ -309,7 +282,7 @@ async function loadMediaPipeLoader() {
                   // MediaPipe зарим browser/CPU delegate дээр нэг frame-ийг уншихдаа
                   // дотроо exception гаргаж болно. Нэг frame алгасаад дараагийн
                   // timestamp-ээр үргэлжлүүлэх нь camera flow-г таслахгүй.
-                  return { faces: [], blink: { blinkSeen, blinkCount, earBelow: earBelowCount > 0 }, occluded: false };
+                  return { faces: [], occluded: false };
                 }
                 const landmarks = res.faceLandmarks ?? [];
                 const validLandmarks = landmarks.filter((lm: { x: number; y: number }[]) => lm.length >= 380);
@@ -335,29 +308,11 @@ async function loadMediaPipeLoader() {
                 };
                 const primary = validLandmarks.length === 1 ? validLandmarks[0] : undefined;
                 if (!primary) {
-                  earBelowCount = 0;
-                  blinkClosed = false;
-                  return { faces: validLandmarks.map(toFaceBox), blink: { blinkSeen, blinkCount, earBelow: false }, occluded: false };
-                }
-
-                const e = (ear(primary, LEFT_EYE) + ear(primary, RIGHT_EYE)) / 2;
-                if (e < 0.23) {
-                  earBelowCount++;
-                  if (earBelowCount >= 2) {
-                    blinkClosed = true;
-                  }
-                } else {
-                  if (blinkClosed && e > 0.27) {
-                    blinkSeen = true;
-                    blinkCount++;
-                    blinkClosed = false;
-                  }
-                  earBelowCount = 0;
+                  return { faces: validLandmarks.map(toFaceBox), occluded: false };
                 }
 
                 return {
                   faces: validLandmarks.map(toFaceBox),
-                  blink: { blinkSeen, blinkCount, earBelow: earBelowCount > 0 },
                   occluded: detectCovered(primary),
                 };
               },
@@ -406,7 +361,6 @@ export function useFaceDetection(
   enabled: boolean
 ) {
   const [faces, setFaces] = useState<FaceBox[]>([]);
-  const [blink, setBlink] = useState<BlinkResult>({ blinkSeen: false, blinkCount: 0, earBelow: false });
   const [occluded, setOccluded] = useState(false);
   const [backend, setBackend] = useState<"native" | "mediapipe" | "landmarker" | "none">("none");
   const backendRef = useRef<DetectorBackend | null>(null);
@@ -444,7 +398,6 @@ export function useFaceDetection(
               if (!disposed) {
                 setFaces(r.faces);
                 if (r.faces.length === 0) centerHistoryRef.current = [];
-                if (r.blink) setBlink(r.blink);
                 if (r.occluded !== undefined) setOccluded(r.occluded);
                 const f = r.faces[0];
                 if (f) {
@@ -476,7 +429,6 @@ export function useFaceDetection(
       widthHistoryRef.current = [];
       centerHistoryRef.current = [];
       setFaces([]);
-      setBlink({ blinkSeen: false, blinkCount: 0, earBelow: false });
       setOccluded(false);
     };
   }, [enabled, videoRef]);
@@ -536,7 +488,7 @@ export function useFaceDetection(
     return "ok";
   })();
 
-  return { faces, blink, occluded, guidance, backend, widthHistoryRef, detectRef: backendRef };
+  return { faces, occluded, guidance, backend, widthHistoryRef, detectRef: backendRef };
 }
 
 /** Толгой эргүүлэх чиглэл — nose байрлалаар; байхгүй бол bounding box төвийн drift-ээр */

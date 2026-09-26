@@ -27,7 +27,7 @@ interface LivenessStep {
 
 /** 3 байрлал — урд → баруун → зүүн. Тус бүрд автоматаар зураг авна. */
 const POSES: LivenessStep[] = [
-  { kind: "center", label: "Камер руу эгц харж, нүдээ нэг удаа анивчина уу." },
+  { kind: "center", label: "Камер руу эгц харж, хөдөлгөөнгүй барина уу." },
   { kind: "right", label: "Толгойгоо баруун тийш эргүүлнэ үү." },
   { kind: "left", label: "Толгойгоо зүүн тийш эргүүлнэ үү." },
 ];
@@ -72,16 +72,14 @@ export function FaceCapture({
   const [holdSince, setHoldSince] = useState<number | null>(null);
   const [holdProgress, setHoldProgress] = useState(0);
   const [stalled, setStalled] = useState(false);
-  const [blinkSatisfied, setBlinkSatisfied] = useState(false);
   const poseFrameCountRef = useRef(0);
-  const centerBlinkBaselineRef = useRef(0);
 
   // Mount хийгдмэгц камерыг автоматаар эхлүүлнэ
   useEffect(() => {
     start();
   }, [start]);
 
-  const { faces, blink, occluded, guidance, backend, widthHistoryRef } = useFaceDetection(
+  const { faces, occluded, guidance, backend, widthHistoryRef } = useFaceDetection(
     videoRef,
     brightness,
     status === "active" && phase !== "done"
@@ -98,8 +96,6 @@ export function FaceCapture({
   const poseCapturesRef = useRef<PoseCapture[]>([]);
   const occludedRef = useRef(false);
   occludedRef.current = occluded;
-  const blinkSatisfiedRef = useRef(false);
-  blinkSatisfiedRef.current = blinkSatisfied;
   const completedRef = useRef(false);
   const phaseRef = useRef<Phase>("position");
   const stepIndexRef = useRef(0);
@@ -278,7 +274,6 @@ export function FaceCapture({
       didAllSteps &&
       stepsDone.length >= totalSteps &&
       stepsDone.every(Boolean) &&
-      blinkRef.current.blinkSeen &&
       sizeVar >= 0.02 &&
       colorConsistent &&
       !occludedRef.current;
@@ -295,7 +290,7 @@ export function FaceCapture({
       centered: guidanceRef.current === "ok",
       stepsCompleted: stepsDone.filter(Boolean).length,
       steps: didAllSteps ? stepsDone.slice(0, totalSteps) : stepsDone,
-      blinkDetected: blinkRef.current.blinkSeen,
+      blinkDetected: false,
       sizeVariance: sizeVar,
       colorConsistent,
       totalElapsedMs,
@@ -384,21 +379,10 @@ export function FaceCapture({
   guidanceRef.current = guidance;
   const brightnessRef = useRef(brightness);
   brightnessRef.current = brightness;
-  const blinkRef = useRef(blink);
-  blinkRef.current = blink;
   const backendRef = useRef(backend);
   backendRef.current = backend;
   const stalledRef = useRef(stalled);
   stalledRef.current = stalled;
-
-  // A blink is required specifically during the center liveness step.
-  // Positioning alone must not advance the flow and fail only at the end.
-  useEffect(() => {
-    if (phase === "liveness" && LIVENESS_STEPS[stepIndex]?.kind === "center" && blink.blinkCount > centerBlinkBaselineRef.current) {
-      setBlinkSatisfied(true);
-      blinkSatisfiedRef.current = true;
-    }
-  }, [blink.blinkCount, phase, stepIndex]);
 
   // Main state machine — face guidance + 3-байрлалт pose capture
   useEffect(() => {
@@ -414,7 +398,7 @@ export function FaceCapture({
       // Эхлээд нүүр төвд зөв байрлалд орохыг хүлээнэ ("урд" pose-ийн эхлэл)
       conditionMet = guidance === "ok";
     } else if (step) {
-      if (step.kind === "center") conditionMet = guidance === "ok" && blinkSatisfiedRef.current;
+      if (step.kind === "center") conditionMet = guidance === "ok";
       else conditionMet = headTurnState(face, prevFaceRef.current) === step.kind;
     }
 
@@ -429,13 +413,11 @@ export function FaceCapture({
         const now = performance.now();
         lastStepTimeRef.current = now;
         if (phase === "position") {
-          // Нүүр төвд тогтвортой — liveness-руу шилжинэ (эхний "урд" pose)
+          // Baseline-ийг phase солихоос өмнө хадгална. Ингэснээр шинэ
+          poseFrameCountRef.current = 0;
           setHoldSince(null);
           setPhase("liveness");
           setStepIndex(0);
-          centerBlinkBaselineRef.current = blink.blinkCount;
-          setBlinkSatisfied(false);
-          blinkSatisfiedRef.current = false;
           prevFaceRef.current = null;
         } else if (step) {
           // Pose зөв тогтсон үед зураг амжилттай авсны дараа л дараагийн pose руу шилжинэ.
@@ -481,20 +463,13 @@ export function FaceCapture({
   }, [status, phase, faces, guidance, stepIndex, holdSince, finishCapture]);
 
   const currentStep = LIVENESS_STEPS[stepIndex];
-  const livenessInstruction =
-    currentStep?.kind === "center"
-      ? blinkSatisfied
-        ? "Анивчилт бүртгэгдлээ ✓ Нүүрээ хөдөлгөөнгүй барина уу."
-        : blink.earBelow
-          ? "Нүдээ нээгээрэй."
-          : "Нүдээ нэг удаа анивчина уу."
-      : currentStep?.label;
+  const livenessInstruction = currentStep?.label;
   // Холд progress ring — state machine-тэй ижил нөхцөл (бусад алхмуудад ч харагдана)
   const activeCondition =
     phase === "position"
       ? guidance === "ok"
       : currentStep?.kind === "center"
-        ? guidance === "ok" && blinkSatisfied
+        ? guidance === "ok"
         : faces.length === 1 && !!currentStep &&
           headTurnState(faces[0] ?? null, prevFaceRef.current) === currentStep.kind;
   const showHold = activeCondition && holdSince !== null;
