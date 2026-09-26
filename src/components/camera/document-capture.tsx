@@ -67,10 +67,10 @@ export function DocumentCapture({
             if (a.isTooDark) g = "tooDark";
             else if (a.isTooBright) g = "tooBright";
             else if (a.isBlurry) g = "blurry";
-            else if (a.edgeBBoxWidth > 96 || a.edgeBBoxHeight > 96) g = "tooClose";
-            else if (a.edgeBBoxWidth > 0 && a.edgeBBoxWidth < 30 && a.edgeDensity > 6) g = "tooFar";
-            else if (a.borderEdgeDensity > a.centerEdgeDensity * 1.8 && a.borderEdgeDensity > 10) g = "tooClose";
-            else if (a.edgeDensity < 18) g = "none";
+            // Edge geometry is advisory only: certificates often have low-contrast
+            // borders and dense text can look like a frame edge. Keep only a very
+            // low-signal guard so a blank wall is not auto-captured.
+            else if (a.edgeDensity < 8) g = "none";
             else g = "ready";
             setGuidance(g);
             if (g === "ready") {
@@ -124,7 +124,8 @@ export function DocumentCapture({
     // Capture хийх яг мөчийн frame-ийг дахин шинжилнэ — auto-capture-ийн
     // 40ms delay дотор баримт хөдөлсөн байж болох тул хуучин analysis-д бүү итгэ.
     const freshAnalysis = analyzeFrame(video);
-    const err = validateCapture(freshAnalysis ?? lastFrameRef.current);
+    // Validate the frame being captured, never stale metrics from an earlier frame.
+    const err = validateCapture(freshAnalysis);
     if (err) {
       setGuidance((prev) => (prev === "ready" || err.includes("булан") ? prev : "blurry"));
       return;

@@ -246,13 +246,10 @@ export function validateCapture(a: FrameAnalysis | null): string | null {
   if (a.brightness < 40) return "Зураг хэт харанхуй байна. Гэрлийг нэмэгдүүлээд дахин авна уу.";
   if (a.isTooBright) return "Зураг хэт гэрэлтсэн байна. Гэрлийг багасгаад дахин авна уу.";
   if (a.isBlurry) return "Зураг бүдэг гарсан байна. Камераа тогтоож, дахин авна уу.";
-  // Баримт бүрэн ороогүй (ирмэг нь frame-аас гарсан) бол хүлээн авахгүй
-  if (a.edgeBBoxWidth > 96 || a.edgeBBoxHeight > 96) {
-    return "Баримт бүрэн харагдахгүй байна — камерыг холдуулж, бүрэн хэмжээгээр багтааж авна уу.";
-  }
-  if (a.edgeBBoxWidth < 8 || a.edgeBBoxHeight < 8) {
-    return "Баримтын ирмэг тодорхойгүй байна — баримтаа хүрээнд бүрэн оруулна уу.";
-  }
+  // Edge bounding boxes are only a guidance signal. Text, glare, low contrast,
+  // and certificate layouts can make the detected edge box incomplete even when
+  // the document is clearly readable. Do not reject a capture on that heuristic;
+  // the live guidance still asks the user to fit all four corners in the frame.
   // Бүх 4 булан тод байх ёстой — хамгийн бүдэг булан нь гол хэсгээс хэт холдсон бол нугалсан байна
   const minCorner = Math.min(...a.cornerSharpness);
   const mini = a.cornerSharpness.indexOf(minCorner);

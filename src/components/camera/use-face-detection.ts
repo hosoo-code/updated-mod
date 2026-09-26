@@ -457,19 +457,37 @@ export function useFaceDetection(
     if (faces.length === 0) return "none";
     if (faces.length > 1) return "multiple";
     const f = faces[0]!;
-    const w = f.width;
-    const cx = f.x + w / 2;
-    const cy = f.y + f.height / 2;
+    let w = f.width;
+    let cx = f.x + w / 2;
+    let cy = f.y + f.height / 2;
 
-    // Бодит ашиглалтад хэт чанга thresholds нь "Зураг авахгүй гацаах"-ыг үүсгэдэг —
-    // бага зэрэг зөөлрүүлсэн (нүүр бүрэн харагдаж байхад ok гэж хүлээн авна)
-    if (w < 0.15) return "tooFar";
-    if (w > 0.68) return "tooClose";
-
-    const dx = cx - 0.5;
-    const dy = cy - 0.45;
-    if (Math.abs(dx) > 0.19) return dx < 0 ? "left" : "right";
-    if (Math.abs(dy) > 0.22) return "offCenter";
+    // The preview uses object-cover, so raw video coordinates do not line up
+    // with the visible oval on portrait phones. Project the detected face into
+    // the visible crop before comparing it with the guide.
+    const video = videoRef.current;
+    const display = video?.getBoundingClientRect();
+    const parent = video?.parentElement?.getBoundingClientRect();
+    if (video && display && parent && video.videoWidth > 0 && video.videoHeight > 0 && parent.width > 0 && parent.height > 0) {
+      const scale = Math.max(parent.width / video.videoWidth, parent.height / video.videoHeight);
+      const visibleW = parent.width / scale / video.videoWidth;
+      const visibleH = parent.height / scale / video.videoHeight;
+      const left = (1 - visibleW) / 2;
+      const top = (1 - visibleH) / 2;
+      cx = (cx - left) / visibleW;
+      cy = (cy - top) / visibleH;
+      w /= visibleW;
+      const guideW = Math.min(0.68 * parent.width, 384) / parent.width;
+      const guideH = 0.54;
+      if (w < guideW * 0.62) return "tooFar";
+      if (w > guideW * 1.12) return "tooClose";
+      if (Math.abs(cx - 0.5) > 0.13) return cx < 0.5 ? "left" : "right";
+      if (Math.abs(cy - 0.5) > guideH * 0.22) return "offCenter";
+    } else {
+      if (w < 0.2) return "tooFar";
+      if (w > 0.56) return "tooClose";
+      if (Math.abs(cx - 0.5) > 0.15) return cx < 0.5 ? "left" : "right";
+      if (Math.abs(cy - 0.5) > 0.18) return "offCenter";
+    }
 
     if (brightness !== null && brightness < 62) return "tooDark";
     if (brightness !== null && brightness > 205) return "tooBright";

@@ -456,6 +456,7 @@ export function VerificationWizard() {
                     onClick={() => {
                       setDocumentChoice("id-card");
                       setDocumentCapture(null);
+                      setRequestId(null);
                     }}
                   />
                   <DocOption
@@ -466,6 +467,7 @@ export function VerificationWizard() {
                     onClick={() => {
                       setDocumentChoice("birth-certificate");
                       setDocumentCapture(null);
+                      setRequestId(null);
                     }}
                   />
                 </div>
