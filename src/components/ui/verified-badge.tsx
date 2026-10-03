@@ -1,0 +1,5 @@
+import { BadgeCheck, ShieldCheck } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Tooltip } from "./tooltip";
+export function VerifiedBadge({ size = "md", withText = true, className }: { size?: "sm" | "md" | "lg"; withText?: boolean; className?: string; }) { return <Tooltip content="Identity verification completed" side="bottom"><span className={cn("inline-flex items-center gap-1.5 rounded-full border border-zinc-300 bg-zinc-100 font-semibold text-zinc-700 dark:border-white/15 dark:bg-white/10 dark:text-zinc-200", size === "sm" && "px-2.5 py-0.5 text-[11px]", size === "md" && "px-3 py-1 text-xs", size === "lg" && "px-4 py-1.5 text-sm", className)}><ShieldCheck className={cn("shrink-0", size === "sm" && "h-3.5 w-3.5", size === "md" && "h-4 w-4", size === "lg" && "h-5 w-5")} />{withText ? "VERIFIED MODERATOR" : null}</span></Tooltip>; }
+export function VerifiedIcon({ className }: { className?: string }) { return <BadgeCheck className={cn("text-zinc-950 dark:text-white", className)} />; }
